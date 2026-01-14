@@ -131,13 +131,17 @@ self.onmessage = async (e) => {
         }
     }
 
-    // --- GENERACIÓN ---
+        // --- GENERACIÓN ---
     if (type === 'generate') {
         if (!text_model || !text_tokenizer) return;
 
+        // 1. Definimos la personalidad: Si viene del agente, la usamos. Si no, genérica.
+        const systemInstruction = data.system_prompt || "Eres un asistente útil en español.";
+        
+        // 2. Construimos el chat separando ROLES (Clave para Qwen)
         const messages = [
-            { role: "system", content: "Eres un asistente útil y breve en español." },
-            { role: "user", content: data.prompt }
+            { role: "system", content: systemInstruction },
+            { role: "user", content: data.text || data.prompt } // data.text es el mensaje del usuario limpio
         ];
 
         try {
@@ -148,17 +152,22 @@ self.onmessage = async (e) => {
 
             const outputs = await text_model.generate({
                 ...inputs,
-                max_new_tokens: 256,
-                do_sample: false, 
-                temperature: 0.1,
+                max_new_tokens: 200, // Respuesta concisa
+                do_sample: true,     // Creatividad activada
+                temperature: 0.6,    // Balanceado para no ser robótico ni alocado
+                repetition_penalty: 1.1, // Evitar bucles en modelos pequeños
             });
 
+            // Decodificación y limpieza
             const decoded = text_tokenizer.decode(outputs[0], { skip_special_tokens: true });
-            
-            // Limpieza robusta de la respuesta
             let response = decoded;
-            if (response.includes("assistant")) {
-                response = response.split("assistant").pop();
+            
+            // Limpieza extra para Qwen (a veces repite el prompt)
+            if (response.includes("assistant\n")) {
+                response = response.split("assistant\n").pop();
+            } else if (response.includes(systemInstruction)) {
+                // Fallback por si no separa bien
+                response = response.substring(response.lastIndexOf("user") + 4); 
             }
             
             self.postMessage({ type: 'generation_result', text: response.trim(), hat: data.hat });
