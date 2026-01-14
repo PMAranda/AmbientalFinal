@@ -3,39 +3,61 @@ export class AgentModule {
         this.worker = worker;
         this.rag = ragModule;
         this.conversationHistory = [];
-        this.isAutoMode = true; // ACTIVADO POR DEFECTO PARA CLASIFICACIÓN CONTINUA
+        
+        // ESTADO
+        this.isAutoMode = true; // Empieza en automático
+        this.activeHat = null;  // Ningún sombrero fijo al inicio
 
-        // PROMPTS ESPAÑOL
-        // PROMPTS ESPAÑOL MEJORADOS PARA GENERAR NUEVAS IDEAS
+        // PROMPTS (Se mantienen igual que antes...)
         this.hatPrompts = {
-            white: "El usuario dijo esto. Como Sombrero Blanco, aporta datos objetivos y hechos adicionales detallados relacionados. NO repitas lo que dijo el usuario.",
-            red: "El usuario expresó esto. Como Sombrero Rojo, valida esa emoción y explica detalladamente cómo te hace sentir a ti también. NO repitas el mensaje.",
-            black: "El usuario mencionó esto. Como Sombrero Negro, señala riesgos o defectos adicionales específicos y explícalos bien. Sé crítico.",
-            yellow: "El usuario dijo esto. Como Sombrero Amarillo, añade beneficios o valores positivos adicionales y elabora sobre ellos. Sé constructivo.",
-            green: "El usuario propuso esto. Como Sombrero Verde, usa esa idea como trampolín para proponer OTRAS ideas locas o alternativas relacionadas. ¡Improvisa y explayate!",
-            blue: "El usuario comentó esto. Como Sombrero Azul, sugiere próximos pasos de acción concretos y organízalos claramente. NO resumas, dirige."
+            white: "Eres el Sombrero Blanco (Analista Objetivo). Tu objetivo es localizar hechos concretos, cifras y datos. No des opiniones. Formato: 'Dato: [Hecho]'. Texto:",
+            red: "Eres el Sombrero Rojo (Emoción e Intuición). Reacciona con corazonadas y sentimientos viscerales. No uses lógica. Formato: 'Sentimiento: [Reacción]'. Texto:",
+            black: "Eres el Sombrero Negro (El Juez Crítico). Identifica riesgos, peligros y debilidades fatales. Sé pesimista. Formato: 'Riesgo: [Crítica]'. Texto:",
+            yellow: "Eres el Sombrero Amarillo (Optimista). Identifica beneficios y valor añadido. Explica por qué funcionará. Formato: 'Beneficio: [Positivo]'. Texto:",
+            green: "Eres el Sombrero Verde (Creatividad). Ignora limitaciones. Propone alternativas innovadoras y soluciones radicales. Formato: 'Idea: [Propuesta]'. Texto:",
+            blue: "Eres el Sombrero Azul (Moderador). Sintetiza la discusión, por orden y define pasos. Formato: 'Resumen: [Síntesis]'. Texto:",
         };
 
         this.setupListeners();
     }
 
     setupListeners() {
-        document.querySelectorAll('.btn-hat').forEach(btn => {
+        const autoBtn = document.getElementById('btn-auto-hat');
+        const hatButtons = document.querySelectorAll('.btn-hat');
+
+        // 1. CLICK EN SOMBREROS DE COLORES (Modo Manual)
+        hatButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const hat = btn.dataset.hat;
-                this.triggerHat(hat);
+                
+                // Cambiar estado
+                this.isAutoMode = false;
+                this.activeHat = hat;
+
+                // Actualizar UI
+                autoBtn.classList.remove('active');
+                hatButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active'); // Iluminar el seleccionado
+
+                console.log(`Modo Manual Activado: Sombrero ${hat.toUpperCase()}`);
             });
         });
 
-        const autoBtn = document.getElementById('btn-auto-hat');
-        // Actualizar estado visual del botón si existe
-        if (autoBtn && this.isAutoMode) autoBtn.classList.add('active');
-
+        // 2. CLICK EN AUTO-FACILITADOR (Modo Automático)
         if (autoBtn) {
+            // Activar visualmente al inicio
+            if(this.isAutoMode) autoBtn.classList.add('active');
+
             autoBtn.addEventListener('click', () => {
-                this.isAutoMode = !this.isAutoMode;
-                autoBtn.classList.toggle('active');
-                if (this.isAutoMode) alert("Modo Auto activado: La IA clasificará tus ideas.");
+                // Cambiar estado
+                this.isAutoMode = true;
+                this.activeHat = null;
+
+                // Actualizar UI
+                hatButtons.forEach(b => b.classList.remove('active'));
+                autoBtn.classList.add('active');
+
+                alert("🤖 Modo Auto activado: El sistema decidirá el mejor rol.");
             });
         }
     }
@@ -43,37 +65,30 @@ export class AgentModule {
     addToHistory(role, text) {
         this.conversationHistory.push(`${role}: ${text}`);
         if (this.conversationHistory.length > 5) this.conversationHistory.shift();
-
-        // LÓGICA ALEATORIA ELIMINADA para garantizar clasificación real
     }
 
-    async triggerHat(hat) {
-        const btn = document.querySelector(`.btn-hat[data-hat="${hat}"]`);
-        if (btn) {
-            btn.style.transform = "scale(1.2)";
-            setTimeout(() => btn.style.transform = "", 200);
-        }
-
-        const lastMsg = this.conversationHistory[this.conversationHistory.length - 1] || "el tema";
-        const content = lastMsg.includes(':') ? lastMsg.split(':')[1] : lastMsg;
-
-        // RAG INTERCEPTION: Si es Sombrero Blanco y hay documentos, usamos búsqueda
-        if (hat === 'white' && this.rag.documents.some(d => d.isReady)) {
-            // Enviamos a main.js/worker para embedding y búsqueda
-            // Usamos un ID especial para distinguir
-            console.log("Triggering RAG for White Hat");
-            this.worker.postMessage({
-                type: 'embed',
-                data: { text: content.trim(), id: `QUERY_RAG:${content.trim()}` }
-            });
-            return; // Detenemos el flujo normal
+    // Método para llamar al worker
+    triggerHat(hat, textOverride = null) {
+        // Obtenemos el texto: o es nuevo (textOverride) o es el último del historial
+        let content = textOverride;
+        if (!content) {
+            const lastMsg = this.conversationHistory[this.conversationHistory.length - 1] || "el tema";
+            content = lastMsg.includes(':') ? lastMsg.split(':')[1] : lastMsg;
         }
 
         const instruction = this.hatPrompts[hat];
-        const fullPrompt = `Contexto: Estamos en un brainstorming.
-Entrada del Usuario: "${content}"
-Instrucción: ${instruction}
-Respuesta (completa y detallada en español):`;
+        const fullPrompt = `
+### INSTRUCCIÓN DEL ROL:
+${instruction}
+
+### TEXTO DE ENTRADA:
+"${content}"
+
+### REQUISITOS:
+- Responde EXCLUSIVAMENTE en español.
+- Sé breve y directo.
+
+### TU RESPUESTA:`;
 
         this.worker.postMessage({
             type: 'generate',

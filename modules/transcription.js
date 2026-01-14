@@ -43,58 +43,31 @@ export class TranscriptionModule {
     }
 
     handleAudioData(inputData) {
-        // VAD: Detección de Actividad de Voz basada en Energía (RMS)
+        // Simple VAD (Voice Activity Detection) - Amplitude threshold
+        // Or just accumulating a buffer to send to worker every X seconds
 
-        // 1. Calcular RMS (Volumen promedio del chunk actual)
-        let sumSquares = 0;
+        // We accumulate ~1 second of audio (16000 samples) then send
+        // Or send smaller chunks if the model supports streaming well.
+        // For Whisper via Transformers.js, it often wants a chunk.
+
+        // For this demo, let's copy the data and send it.
+        // We'll trust the worker/pipeline to handle the framing or we accumulate here.
+
+        // Let's accumulate ~2 seconds of audio before sending for better context
+        // 16,000 * 2 = 32,000 samples
+
         for (let i = 0; i < inputData.length; i++) {
-            const sample = inputData[i];
-            sumSquares += sample * sample;
-            this.buffer.push(sample);
-        }
-        const rms = Math.sqrt(sumSquares / inputData.length);
-
-        // Umbrales
-        const VAD_THRESHOLD = 0.02;     // Sensibilidad al volumen (ajustable)
-        const SILENCE_SAMPLES = 24000;  // ~1.5 segundos a 16kHz
-        const MAX_BUFFER = 240000;      // Max 15 segundos para evitar memoria infinita
-
-        // 2. Lógica de estado
-        if (rms > VAD_THRESHOLD) {
-            // Hay voz, reiniciamos contador de silencio
-            this.silenceCounter = 0;
-        } else {
-            // Silencio
-            if (this.buffer.length > 0) {
-                this.silenceCounter = (this.silenceCounter || 0) + inputData.length;
-            }
+            this.buffer.push(inputData[i]);
         }
 
-        // 3. Decisión de envío
-        // Enviar si: (Silencio largo detectado Y tenemos datos suficientes) O (Buffer lleno)
-        const isLongSilence = this.silenceCounter > SILENCE_SAMPLES;
-        const hasEnoughData = this.buffer.length > 8000; // Mínimo 0.5s para evitar ruiditos
-        const isBufferFull = this.buffer.length > MAX_BUFFER;
-
-        if ((isLongSilence && hasEnoughData) || isBufferFull) {
-            console.log(`Sending buffer: ${this.buffer.length} samples. Reason: ${isBufferFull ? 'FULL' : 'SILENCE'}`);
-
+        if (this.buffer.length >= 16000 * 3) { // 3 seconds chunks
             const audioData = new Float32Array(this.buffer);
             this.worker.postMessage({
                 type: 'audio_chunk',
                 data: audioData
             });
-
-            // Limpieza
-            this.buffer = [];
-            this.silenceCounter = 0;
-        } else if (isLongSilence && !hasEnoughData) {
-            // Si es puro silencio y poco dato, limpiamos para no acumular ruido de fondo infinito
-            // pero mantenemos un pequeño solapamiento si quisiéramos (aquí limpieza total para simpleza)
-            if (this.buffer.length > SILENCE_SAMPLES * 2) {
-                this.buffer = [];
-                this.silenceCounter = 0;
-            }
+            this.buffer = []; // clear buffer after sending
+            // Note: Overlapping windows would be better for continuity
         }
     }
 

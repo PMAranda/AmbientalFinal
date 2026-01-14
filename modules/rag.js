@@ -1,7 +1,7 @@
 export class RAGModule {
     constructor(worker) {
         this.worker = worker;
-        this.documents = [];
+        this.documents = []; 
         this.chunkSize = 150; // Palabras por chunk
         this.overlap = 30;    // Solapamiento de palabras
         this.setupDragDrop();
@@ -10,7 +10,7 @@ export class RAGModule {
     setupDragDrop() {
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
-
+        
         if (!dropZone || !fileInput) return;
 
         dropZone.addEventListener('click', () => fileInput.click());
@@ -95,9 +95,9 @@ export class RAGModule {
 
     // Chunking inteligente por palabras
     chunkText(text, wordsPerChunk, wordsOverlap) {
-        const words = text.split(/\s+/);
+        const words = text.split(/\s+/); 
         const chunks = [];
-
+        
         for (let i = 0; i < words.length; i += (wordsPerChunk - wordsOverlap)) {
             const chunkWords = words.slice(i, i + wordsPerChunk);
             if (chunkWords.length > 10) { // Ignorar chunks muy pequeños
@@ -111,7 +111,7 @@ export class RAGModule {
     handleEmbedding(id, vector) {
         const [docId, chunkIndex] = id.split('_');
         const doc = this.documents.find(d => d.id === docId);
-
+        
         if (doc) {
             const chunk = doc.chunks.find(c => c.id === id);
             if (chunk) chunk.vector = vector;
@@ -141,45 +141,18 @@ export class RAGModule {
         return dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
-    search(queryText, queryVector, topK = 3) {
+    search(queryVector, topK = 3) {
         let allChunks = [];
         this.documents.forEach(doc => {
             if (doc.isReady) allChunks.push(...doc.chunks);
         });
 
-        // Preprocesar keywords de la query
-        const queryTerms = queryText.toLowerCase()
-            .replace(/[^\w\s\u00C0-\u00FF]/g, '') // Eliminar puntuación
-            .split(/\s+/)
-            .filter(w => w.length > 3); // Ignorar palabras cortas
-
-        const scored = allChunks.map(chunk => {
-            // 1. Vector Score (Similitud Semántica)
-            const vectorScore = this.cosineSimilarity(queryVector, chunk.vector);
-
-            // 2. Keyword Score (Coincidencia Exacta)
-            const chunkTextLower = chunk.text.toLowerCase();
-            let matches = 0;
-            queryTerms.forEach(term => {
-                if (chunkTextLower.includes(term)) matches++;
-            });
-            const keywordScore = queryTerms.length > 0 ? (matches / queryTerms.length) : 0;
-
-            // 3. Score Final (Híbrido)
-            // Damos mucho peso a keywords si existen (precisión) pero mantenemos semántica
-            // Vector suele ser 0.7-0.9, KW es 0 o 1.
-            const finalScore = (vectorScore * 0.6) + (keywordScore * 0.4);
-
-            return {
-                text: chunk.text,
-                score: finalScore,
-                originalVectorScore: vectorScore,
-                matchCount: matches
-            };
-        });
+        const scored = allChunks.map(chunk => ({
+            text: chunk.text,
+            score: this.cosineSimilarity(queryVector, chunk.vector)
+        }));
 
         scored.sort((a, b) => b.score - a.score);
-        console.log("Top matches:", scored.slice(0, 3));
         return scored.slice(0, topK);
     }
 }
