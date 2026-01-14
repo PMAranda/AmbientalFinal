@@ -131,17 +131,13 @@ self.onmessage = async (e) => {
         }
     }
 
-        // --- GENERACIÓN ---
+    // --- GENERACIÓN ---
     if (type === 'generate') {
         if (!text_model || !text_tokenizer) return;
 
-        // 1. Definimos la personalidad: Si viene del agente, la usamos. Si no, genérica.
-        const systemInstruction = data.system_prompt || "Eres un asistente útil en español.";
-        
-        // 2. Construimos el chat separando ROLES (Clave para Qwen)
         const messages = [
-            { role: "system", content: systemInstruction },
-            { role: "user", content: data.text || data.prompt } // data.text es el mensaje del usuario limpio
+            { role: "system", content: "Eres un asistente útil y breve." },
+            { role: "user", content: data.prompt }
         ];
 
         try {
@@ -152,22 +148,17 @@ self.onmessage = async (e) => {
 
             const outputs = await text_model.generate({
                 ...inputs,
-                max_new_tokens: 200, // Respuesta concisa
-                do_sample: true,     // Creatividad activada
-                temperature: 0.6,    // Balanceado para no ser robótico ni alocado
-                repetition_penalty: 1.1, // Evitar bucles en modelos pequeños
+                max_new_tokens: 256,
+                do_sample: false, 
+                temperature: 0.1,
             });
 
-            // Decodificación y limpieza
             const decoded = text_tokenizer.decode(outputs[0], { skip_special_tokens: true });
-            let response = decoded;
             
-            // Limpieza extra para Qwen (a veces repite el prompt)
-            if (response.includes("assistant\n")) {
-                response = response.split("assistant\n").pop();
-            } else if (response.includes(systemInstruction)) {
-                // Fallback por si no separa bien
-                response = response.substring(response.lastIndexOf("user") + 4); 
+            // Limpieza robusta de la respuesta
+            let response = decoded;
+            if (response.includes("assistant")) {
+                response = response.split("assistant").pop();
             }
             
             self.postMessage({ type: 'generation_result', text: response.trim(), hat: data.hat });
@@ -179,54 +170,32 @@ self.onmessage = async (e) => {
     }
 
     // --- CLASIFICACIÓN DE INTENCIÓN (OPTIMIZADA) ---
-if (type === 'classify_intent') {
+    if (type === 'classify_intent') {
         if (!classifier_pipeline) return;
-
-        // 1. DEFINIR ETIQUETAS (Usamos Inglés para mayor precisión con DeBERTa)
+        
+        // Etiquetas optimizadas para distinguir mejor 'riesgos' de 'beneficios'
         const labels = [
-            "objective facts and data",    // White
-            "emotional reaction",          // Red
-            "risks and criticism",         // Black
-            "benefits and optimism",       // Yellow
-            "new ideas and creativity",    // Green
-            "process control and summary", // Blue
+            "buscar datos objetivos y hechos",        // White
+            "expresar una reacción emocional intensa, sentimiento subjetivo o corazonada irracional",       // Red
+            "advertir sobre un riesgo, peligro o problema fatal", // Black
+            "defender la idea actual y listar sus ventajas o beneficios",  // Yellow
+            "proponer una alternativa diferente, solución nueva o cambio innovador",   // Green
+            "moderar la reunión, cambiar de tema o pedir conclusiones",           // Blue
         ];
-
-        // 2. MAPEO: Etiqueta Inglés -> Identificador del Sombrero
-        // Esto conecta lo que detecta la IA con lo que necesita tu interfaz
-        const hatMap = {
-            "objective facts and data": "White", 
-            "emotional reaction": "Red",         
-            "risks and criticism": "Black",      
-            "benefits and optimism": "Yellow",   
-            "new ideas and creativity": "Green", 
-            "process control and summary": "Blue"
+        
+        const output = await classifier_pipeline(data.text, labels, { multi_label: false });
+        
+        const map = { 
+            "buscar datos objetivos y hechos": "white", 
+            "expresar una reacción emocional intensa, sentimiento subjetivo o corazonada irracional": "red", 
+            "advertir sobre un riesgo, peligro o problema fatal": "black", 
+            "defender la idea actual y listar sus ventajas o beneficios": "yellow", 
+            "proponer una alternativa diferente, solución nueva o cambio innovador": "green", 
+            "moderar la reunión, cambiar de tema o pedir conclusiones": "blue",
         };
-
-        // 3. EJECUCIÓN (Con hypothesis_template para mejorar el contexto)
-        // "multi_label: false" fuerza a elegir solo un sombrero ganador.
-        const output = await classifier_pipeline(data.text, labels, { 
-            multi_label: false,
-            hypothesis_template: "The intent of this sentence is {}." 
-        });
-
-        // 4. PROCESAR RESULTADO
-        const topLabel = output.labels[0]; // La etiqueta ganadora
-        const topScore = output.scores[0]; // La confianza (0 a 1)
-        const detectedHat = hatMap[topLabel]; // Traducimos a "White", "Red", etc.
-
-        // (Opcional) Filtro de confianza: Si es menor a 0.30, quizás es ruido.
-        // if (topScore < 0.30) { ... manejar caso incierto ... }
-
-        // Enviamos el resultado al hilo principal
-        self.postMessage({ 
-            type: 'intent_result', 
-            hat: detectedHat, 
-            confidence: topScore,
-            original_label: topLabel 
-        });
+        
+        self.postMessage({ type: 'intent_result', hat: map[output.labels[0]], confidence: output.scores[0] });
     }
-
 
     // --- RAG (EMBEDDINGS) ---
     if (type === 'embed') {
@@ -247,33 +216,37 @@ if (type === 'classify_intent') {
     }
 
     // --- VISIÓN ---
-    // Dentro del onmessage del Worker
     if (type === 'vision') {
-        if (!vlm_model) return;
-        try {
-            const image = await RawImage.read(data.image);
-            const task = '<MORE_DETAILED_CAPTION>'; 
-            const prompts = vlm_processor.construct_prompts(task);
-            const text_inputs = vlm_tokenizer(prompts);
-            const vision_inputs = await vlm_processor(image);
-            
-            const generated_ids = await vlm_model.generate({
-                ...text_inputs,
-                pixel_values: vision_inputs.pixel_values,
-                max_new_tokens: 100,
-            });
+        // Notificación visual rápida (opcional)
+        addMessageToChat('system', '👁️ Analizando imagen desde múltiples perspectivas...', 'info');
 
-            const generated_text = vlm_tokenizer.batch_decode(generated_ids, { skip_special_tokens: false })[0];
-            const result = vlm_processor.post_process_generation(generated_text, task, image.size);
-            
-            // Enviamos el resultado al hilo principal
-            self.postMessage({ 
-                type: 'vision_result', 
-                text: result['<MORE_DETAILED_CAPTION>'] 
+        // 1. LANZAR SOMBRERO BLANCO (Objetividad)
+        // Pedimos traducción y descripción pura.
+        const promptWhite = `CONTEXTO: La visión artificial detectó esto (en inglés): "${text}".
+        TAREA: Actúa como Sombrero Blanco.
+        1. Traduce la descripción al español.
+        2. Describe OBJETIVAMENTE qué elementos ves en el dibujo.
+        3. Sé breve y no des opiniones.`;
+
+        worker.postMessage({ 
+            type: 'generate', 
+            data: { prompt: promptWhite, hat: 'white' } 
+        });
+
+        // 2. LANZAR SOMBRERO VERDE (Creatividad)
+        // Pedimos ideas sobre lo mismo, aprovechando el contexto.
+        const promptGreen = `CONTEXTO VISUAL: "${text}".
+        TAREA: Actúa como Sombrero Verde.
+        1. Ignora la descripción técnica.
+        2. Propón una idea innovadora, una mejora creativa o un uso alternativo para este dibujo.
+        3. Sorpréndeme.`;
+
+        // Pequeño retraso para que no salgan desordenados (opcional pero recomendado)
+        setTimeout(() => {
+            worker.postMessage({ 
+                type: 'generate', 
+                data: { prompt: promptGreen, hat: 'green' } 
             });
-        } catch (err) { 
-            console.error(err); 
-            self.postMessage({ type: 'vision_result', error: true, text: "Error analizando imagen." });
-        }
+        }, 500);
     }
 };

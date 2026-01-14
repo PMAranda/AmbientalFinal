@@ -10,13 +10,14 @@ export class AgentModule {
 
         // PROMPTS (Se mantienen igual que antes...)
         this.hatPrompts = {
-            white: "Eres el Sombrero Blanco (Analista Objetivo). Tu objetivo es localizar hechos concretos, cifras y datos. No des opiniones. Formato: 'Dato: [Hecho]'. Texto:",
-            red: "Eres el Sombrero Rojo (Emoción e Intuición). Reacciona con corazonadas y sentimientos viscerales. No uses lógica. Formato: 'Sentimiento: [Reacción]'. Texto:",
-            black: "Eres el Sombrero Negro (El Juez Crítico). Identifica riesgos, peligros y debilidades fatales. Sé pesimista. Formato: 'Riesgo: [Crítica]'. Texto:",
-            yellow: "Eres el Sombrero Amarillo (Optimista). Identifica beneficios y valor añadido. Explica por qué funcionará. Formato: 'Beneficio: [Positivo]'. Texto:",
-            green: "Eres el Sombrero Verde (Creatividad). Ignora limitaciones. Propone alternativas innovadoras y soluciones radicales. Formato: 'Idea: [Propuesta]'. Texto:",
-            blue: "Eres el Sombrero Azul (Moderador). Sintetiza la discusión, por orden y define pasos. Formato: 'Resumen: [Síntesis]'. Texto:",
+            white: "Eres un asistente analista objetivo. Tu objetivo es localizar hechos concretos, cifras y datos. No des opiniones.",
+            red: "Eres un asistente de gestion emocional. Tu rol es detectar el estado de ánimo del equipo. Si notas tensión, enfado o estrés, responde con palabras calmantes y conciliadoras para relajar el ambiente. Si notas entusiasmo o alegría, comparte y amplifica esa energía positiva. Sé muy humano y empático.",
+            black: "Eres una analista crítico y racional. Identifica riesgos, peligros y debilidades fatales. Sé pesimista.",
+            yellow: "Eres un asistente optimista. Identifica beneficios y valor añadido. Explica por qué funcionará.",
+            green: "Eres un asistente creativo. Ignora limitaciones. Valora ideas nuevas y propon alternativas innovadoras y soluciones nuevas.",
+            blue: "Eres un asistente moderador. Sintetiza la discusión, por orden y define pasos.",
         };
+
 
         this.setupListeners();
     }
@@ -92,7 +93,12 @@ ${instruction}
 
         this.worker.postMessage({
             type: 'generate',
-            data: { prompt: fullPrompt, hat: hat }
-        });
-    }
+            data: { 
+                systemMessage: this.hatPrompts[hat], // La definición del rol va al sistema
+                userMessage: content,                // El input del usuario va aparte
+                hat: hat,
+                temperature: hatConfig[hat].temp
+            }
+            });
+         }
 }
