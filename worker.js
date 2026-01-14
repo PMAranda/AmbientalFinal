@@ -153,7 +153,7 @@ self.onmessage = async (e) => {
             const outputs = await text_model.generate({
                 ...inputs,
                 max_new_tokens: 256,
-                do_sample: false, // Pon true para más variedad creativa
+                do_sample: true, // Pon true para más variedad creativa
                 temperature: 0.1, // Un poco más alto para creatividad, 0.1 es muy robótico
                 top_p: 0.9,
             });
