@@ -141,40 +141,9 @@ RESPUESTA:`;
     }
 
     // F. Visión
-    if (type === 'vision_result') {
-            // Aquí empieza la lógica de los Sombreros basada en el resultado de la visión
-            
-            // 1. Notificación visual
-            addMessageToChat('system', '👁️ Analizando imagen desde múltiples perspectivas...', 'info');
-
-            // --- LANZAR SOMBRERO BLANCO (Objetividad) ---
-            // 'text' es lo que el worker nos devolvió (la descripción en inglés)
-            const promptWhite = `CONTEXTO: La visión artificial detectó esto (en inglés): "${text}".
-            TAREA: Actúa como Sombrero Blanco.
-            1. Traduce la descripción al español.
-            2. Describe OBJETIVAMENTE qué elementos ves en el dibujo.
-            3. Sé breve y no des opiniones.`;
-
-            worker.postMessage({ 
-                type: 'generate', 
-                data: { prompt: promptWhite, hat: 'white' } 
-            });
-
-            // --- LANZAR SOMBRERO VERDE (Creatividad) ---
-            const promptGreen = `CONTEXTO VISUAL: "${text}".
-            TAREA: Actúa como Sombrero Verde.
-            1. Ignora la descripción técnica.
-            2. Propón una idea innovadora, una mejora creativa o un uso alternativo para este dibujo.
-            3. Sorpréndeme.`;
-
-            // Retraso para evitar colisiones en la UI o el flujo del modelo
-            setTimeout(() => {
-                worker.postMessage({ 
-                    type: 'generate', 
-                    data: { prompt: promptGreen, hat: 'green' } 
-                });
-            }, 500);
-        }
+if (type === 'vision_result') {
+        addMessageToChat('bot', `👁️ Análisis visual: ${text}`, 'blue');
+    }
 };
 
 // UI Helpers
