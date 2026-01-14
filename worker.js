@@ -135,9 +135,13 @@ self.onmessage = async (e) => {
     if (type === 'generate') {
         if (!text_model || !text_tokenizer) return;
 
+        // CAMBIO CLAVE: Si enviamos un 'system_prompt', lo usamos. Si no, usamos el genérico.
+        const systemInstruction = data.system_prompt || "Eres un asistente útil y breve en español.";
+        
+        // Construimos el chat correctamente separando Roles
         const messages = [
-            { role: "system", content: "Eres un asistente útil y breve." },
-            { role: "user", content: data.prompt }
+            { role: "system", content: systemInstruction },
+            { role: "user", content: data.text || data.prompt } // data.text es el input del usuario limpio
         ];
 
         try {
@@ -149,8 +153,9 @@ self.onmessage = async (e) => {
             const outputs = await text_model.generate({
                 ...inputs,
                 max_new_tokens: 256,
-                do_sample: false, 
-                temperature: 0.1,
+                do_sample: true, // Pon true para más variedad creativa
+                temperature: 0.6, // Un poco más alto para creatividad, 0.1 es muy robótico
+                top_p: 0.9,
             });
 
             const decoded = text_tokenizer.decode(outputs[0], { skip_special_tokens: true });
@@ -169,32 +174,52 @@ self.onmessage = async (e) => {
         }
     }
 
-    // --- CLASIFICACIÓN DE INTENCIÓN (OPTIMIZADA) ---
     if (type === 'classify_intent') {
         if (!classifier_pipeline) return;
-        
-        // Etiquetas optimizadas para distinguir mejor 'riesgos' de 'beneficios'
+
+        // 1. DEFINIR ETIQUETAS (Usamos Inglés para mayor precisión con DeBERTa)
         const labels = [
-            "buscar datos objetivos y hechos",        // White
-            "expresar una reacción emocional intensa, sentimiento subjetivo o corazonada irracional",       // Red
-            "advertir sobre un riesgo, peligro o problema fatal", // Black
-            "defender la idea actual y listar sus ventajas o beneficios",  // Yellow
-            "proponer una alternativa diferente, solución nueva o cambio innovador",   // Green
-            "moderar la reunión, cambiar de tema o pedir conclusiones",           // Blue
+            "objective facts and data",    // White
+            "emotional reaction",          // Red
+            "risks and criticism",         // Black
+            "benefits and optimism",       // Yellow
+            "new ideas and creativity",    // Green
+            "process control and summary", // Blue
         ];
-        
-        const output = await classifier_pipeline(data.text, labels, { multi_label: false });
-        
-        const map = { 
-            "buscar datos objetivos y hechos": "white", 
-            "expresar una reacción emocional intensa, sentimiento subjetivo o corazonada irracional": "red", 
-            "advertir sobre un riesgo, peligro o problema fatal": "black", 
-            "defender la idea actual y listar sus ventajas o beneficios": "yellow", 
-            "proponer una alternativa diferente, solución nueva o cambio innovador": "green", 
-            "moderar la reunión, cambiar de tema o pedir conclusiones": "blue",
+
+        // 2. MAPEO: Etiqueta Inglés -> Identificador del Sombrero
+        // Esto conecta lo que detecta la IA con lo que necesita tu interfaz
+        const hatMap = {
+            "objective facts and data": "White", 
+            "emotional reaction": "Red",         
+            "risks and criticism": "Black",      
+            "benefits and optimism": "Yellow",   
+            "new ideas and creativity": "Green", 
+            "process control and summary": "Blue"
         };
-        
-        self.postMessage({ type: 'intent_result', hat: map[output.labels[0]], confidence: output.scores[0] });
+
+        // 3. EJECUCIÓN (Con hypothesis_template para mejorar el contexto)
+        // "multi_label: false" fuerza a elegir solo un sombrero ganador.
+        const output = await classifier_pipeline(data.text, labels, { 
+            multi_label: false,
+            hypothesis_template: "The intent of this sentence is {}." 
+        });
+
+        // 4. PROCESAR RESULTADO
+        const topLabel = output.labels[0]; // La etiqueta ganadora
+        const topScore = output.scores[0]; // La confianza (0 a 1)
+        const detectedHat = hatMap[topLabel]; // Traducimos a "White", "Red", etc.
+
+        // (Opcional) Filtro de confianza: Si es menor a 0.30, quizás es ruido.
+        // if (topScore < 0.30) { ... manejar caso incierto ... }
+
+        // Enviamos el resultado al hilo principal
+        self.postMessage({ 
+            type: 'intent_result', 
+            hat: detectedHat, 
+            confidence: topScore,
+            original_label: topLabel 
+        });
     }
 
     // --- RAG (EMBEDDINGS) ---

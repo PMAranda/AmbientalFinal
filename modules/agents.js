@@ -93,12 +93,7 @@ ${instruction}
 
         this.worker.postMessage({
             type: 'generate',
-            data: { 
-                systemMessage: this.hatPrompts[hat], // La definición del rol va al sistema
-                userMessage: content,                // El input del usuario va aparte
-                hat: hat,
-                temperature: hatConfig[hat].temp
-            }
-            });
-         }
+            data: { prompt: fullPrompt, hat: hat }
+        });
+    }
 }
