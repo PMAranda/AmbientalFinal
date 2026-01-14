@@ -40,26 +40,34 @@ const handleUserMessage = (inputText = null) => {
     addMessageToChat('user', text);
     agents.addToHistory('User', text);
 
-    // 1. Modo Auto (Orquestador)
+    // --- LÓGICA DE DECISIÓN DE AGENTE ---
+
+    // CASO 1: MODO AUTO (Orquestador decide)
     if (agents.isAutoMode) {
         addMessageToChat('system', '🧠 Analizando intención...', 'info');
         worker.postMessage({ type: 'classify_intent', data: { text: text } });
         return;
     }
 
-    // 2. RAG (Búsqueda en documentos)
-    const hasDocuments = rag.documents.some(d => d.isReady);
-    if (hasDocuments) {
-        addMessageToChat('system', '🔍 Buscando en documentos...', 'info');
-        // CORRECCIÓN: Enviamos 'id' dentro de 'data'
-        worker.postMessage({
-            type: 'embed',
-            data: { text: text, id: `QUERY:${text}` }
-        });
-    } else {
-        // 3. Chat General
-        agents.triggerHat('blue', text);
+    // CASO 2: MODO MANUAL (Sombrero fijo seleccionado)
+    if (agents.activeHat) {
+        // Si es el Blanco, intentamos usar RAG primero si hay docs
+        if (agents.activeHat === 'white' && rag.documents.some(d => d.isReady)) {
+             addMessageToChat('system', '⚪ Sombrero Blanco buscando en datos...', 'white');
+             worker.postMessage({ 
+                type: 'embed', 
+                data: { text: text, id: `QUERY:${text}` } 
+            });
+        } 
+        // Cualquier otro color (o blanco sin docs) responde directo
+        else {
+            agents.triggerHat(agents.activeHat, text);
+        }
+        return;
     }
+
+    // Fallback (por si acaso): Modo Azul por defecto
+    agents.triggerHat('blue', text);
 };
 
 if (btnSend) btnSend.addEventListener('click', () => handleUserMessage());
@@ -88,48 +96,37 @@ worker.onmessage = (e) => {
 
     // C. Orquestador
     if (type === 'intent_result') {
-        addMessageToChat('system', `💡 Intención: Sombrero ${hat.toUpperCase()} (${(confidence * 100).toFixed(0)}%)`, hat);
-        agents.triggerHat(hat);
+        const safeHat = (typeof hat === 'string' && hat) ? hat : null;
+        const hatLabel = safeHat ? safeHat.toUpperCase() : 'DESCONOCIDO';
+        const confPct = (typeof confidence === 'number') ? (confidence * 100).toFixed(0) : '0';
+
+        addMessageToChat('system', `💡 Intención: Sombrero ${hatLabel} (${confPct}%)`, safeHat);
+        if (safeHat) agents.triggerHat(safeHat);
     }
 
     // D. RAG (Mejorado)
     if (type === 'embedding_result') {
         // Verificamos que sea una respuesta a una pregunta y no un chunk
-        if (id && typeof id === 'string' && (id.startsWith('QUERY:') || id.startsWith('QUERY_RAG:'))) {
-            const isRagSpecific = id.startsWith('QUERY_RAG:');
-            const prefix = isRagSpecific ? 'QUERY_RAG:' : 'QUERY:';
-            const originalQuery = id.split(prefix)[1];
-
-            const results = rag.search(originalQuery, embedding, 3); // Top 3 resultados (Híbrido)
+        if (id && typeof id === 'string' && id.startsWith('QUERY:')) {
+            const originalQuery = id.split('QUERY:')[1];
+            const results = rag.search(embedding, 3); // Top 3 resultados
 
             if (results.length > 0 && results[0].score > 0.25) {
                 const bestChunk = results[0];
-
+                
                 // Feedback visual de lo encontrado
-                // Feedback visual de lo encontrado
-                addMessageToChat('system', `📄 <b>Encontrado en PDF (${(results[0].score * 100).toFixed(0)}%):</b><br>"${bestChunk.text}"`, 'white');
-
+                addMessageToChat('system', `📄 <b>Encontrado en PDF:</b> "...${bestChunk.text.substring(0, 100)}..."`, 'white');
+                
                 // Prompt específico para que el modelo conteste usando el contexto
-                const prompt = `Contexto del Documento: "${bestChunk.text}"
-Pregunta del Usuario: "${originalQuery}"
-Instrucción: Como Sombrero Blanco, responde a la pregunta basándote SOLAMENTE en el contexto proporcionado. Sé objetivo.
-Respuesta:`;
-
+                const prompt = `Instrucción: Usa el siguiente CONTEXTO para responder a la PREGUNTA.
+CONTEXTO: "${bestChunk.text}"
+PREGUNTA: "${originalQuery}"
+RESPUESTA:`;
+                
                 worker.postMessage({ type: 'generate', data: { prompt, hat: 'white' } });
             } else {
-                if (isRagSpecific) {
-                    addMessageToChat('system', '⚠️ No encontrado en documentos. Usando conocimiento general.', 'warning');
-                    // Fallback a generación normal sin contexto pero como sombrero blanco
-                    // Llamamos manualmente a worker.generate simulando que agents.js lo envió
-                    const promptFallback = `Contexto: Brainstorming.
-Entrada: "${originalQuery}"
-Instrucción: El usuario preguntó esto buscando datos, pero no hay documentos. Como Sombrero Blanco, responde con un dato objetivo general.
-Respuesta:`;
-                    worker.postMessage({ type: 'generate', data: { prompt: promptFallback, hat: 'white' } });
-                } else {
-                    // Fallback antiguo (probablemente no se usa ya)
-                    agents.triggerHat('blue', originalQuery);
-                }
+                addMessageToChat('system', '⚠️ No encontrado en documentos. Usando conocimiento general.', 'warning');
+                agents.triggerHat('blue', originalQuery);
             }
         } else if (id) {
             // Es un chunk de un documento cargándose
@@ -154,7 +151,7 @@ function handleProgress(percent, msg) {
     const container = document.getElementById('progress-container');
     const bar = document.getElementById('progress-bar');
     const txt = document.getElementById('progress-text');
-
+    
     if (container && msg) {
         container.style.display = 'block';
         txt.innerText = msg;
@@ -171,23 +168,112 @@ function addMessageToChat(role, text, hat = null) {
     const chatContainer = document.getElementById('chat-stream');
     const msgDiv = document.createElement('div');
     const isSystem = role === 'system';
-
+    
     msgDiv.className = `message ${role} ${hat ? 'hat-' + hat : ''}`;
+    
+    // Procesar negritas **texto** -> <b>texto</b>
     let content = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
 
+    // Construir HTML
     if (isSystem) {
         msgDiv.innerHTML = `<div class="bubble system-bubble">${content}</div>`;
     } else {
         const avatar = role === 'user' ? '👤' : '🤖';
         msgDiv.innerHTML = `<div class="avatar">${avatar}</div><div class="bubble">${content}</div>`;
     }
+    
     chatContainer.appendChild(msgDiv);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // --- FUNCIÓN DE SCROLL ROBUSTA ---
+    const scrollToBottom = () => {
+        // Opción A: Directo y sin fallos (scrollTop es más fiable que scrollTo en algunos navegadores)
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    };
+
+    // 1. Intentar scroll inmediato
+    scrollToBottom();
+
+    // 2. Intentar de nuevo tras un instante (para asegurar que el navegador pintó el nuevo div)
+    requestAnimationFrame(() => {
+        scrollToBottom();
+        // Un último intento de seguridad por si había imágenes cargando
+        setTimeout(scrollToBottom, 100);
+    });
 }
 
+// --- GESTIÓN DE GALERÍA DE IMÁGENES ---
+const galleryGrid = document.getElementById('gallery-grid');
+const galleryCount = document.getElementById('gallery-count');
+const modal = document.getElementById('image-modal');
+const modalImg = document.getElementById('modal-img');
+const closeModal = document.querySelector('.close-modal');
+let savedImages = 0;
+// Escuchar evento de nuevo análisis (viene de canvas.js)
 document.addEventListener('debug-image', (e) => {
-    addMessageToChat('system', `<img src="${e.detail}" style="max-height:100px; border-radius:8px;">`, 'info');
+    const imageUrl = e.detail;
+    
+    // 1. Mostrar en el chat (como antes)
+    addMessageToChat('system', `<img src="${imageUrl}" style="max-height:100px; border-radius:8px; border:1px solid #444;">`, 'info');
+
+    // 2. Añadir a la Galería Sidebar
+    addCheckToGallery(imageUrl);
 });
 
+function addCheckToGallery(url) {
+    // Quitar mensaje de "vacío" si es la primera
+    const emptyText = document.querySelector('.empty-gallery-text');
+    if (emptyText) emptyText.remove();
+
+    // Crear elemento
+    const div = document.createElement('div');
+    div.className = 'gallery-item glass-panel-inset';
+    div.innerHTML = `<img src="${url}" alt="Análisis ${savedImages + 1}">`;
+    
+    // Evento para abrir modal
+    div.addEventListener('click', () => {
+        modal.classList.remove('hidden');
+        modalImg.src = url;
+    });
+
+    // Añadir al principio (lo más nuevo arriba)
+    galleryGrid.prepend(div);
+
+    // Actualizar contador
+    savedImages++;
+    if (galleryCount) galleryCount.innerText = savedImages;
+}
+
+// Cerrar Modal
+if (closeModal) {
+    closeModal.addEventListener('click', () => {
+        modal.classList.add('hidden');
+    });
+}
+
+// Cerrar al hacer clic fuera de la imagen
+window.addEventListener('click', (e) => {
+    if (e.target === modal) {
+        modal.classList.add('hidden');
+    }
+});
 // Iniciar carga
 worker.postMessage({ type: 'load' });
+
+// --- LÓGICA DE BIENVENIDA ---
+const btnStart = document.getElementById('btn-start-app');
+const overlay = document.getElementById('welcome-overlay');
+
+if (btnStart && overlay) {
+    btnStart.addEventListener('click', () => {
+        // Efecto de desvanecimiento
+        overlay.classList.add('hidden');
+        
+        // Opcional: Reproducir un sonido sutil de inicio
+        // o iniciar el contexto de audio si es necesario por políticas del navegador
+        
+        // Eliminamos del DOM después de la animación para que no moleste
+        setTimeout(() => {
+            overlay.style.display = 'none';
+        }, 500);
+    });
+}

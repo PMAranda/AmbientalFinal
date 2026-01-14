@@ -33,7 +33,14 @@
             <div class="document-list" id="document-list">
                 <!-- Document items will go here -->
             </div>
-
+            <div class="section-header" style="margin-top: 20px;">
+                <h2>Galería de Pizarra</h2>
+                <span class="badge" id="gallery-count">0</span>
+            </div>
+            
+            <div class="gallery-grid" id="gallery-grid">
+                <div class="empty-gallery-text">Aún no hay análisis</div>
+            </div>
             <div class="status-monitor glass-panel-inset">
                 <h3>Estado del Sistema</h3>
                 <div class="status-item">
@@ -80,14 +87,14 @@
                     <button class="btn-hat yellow" data-hat="yellow" title="Optimismo">🟡</button>
                     <button class="btn-hat green" data-hat="green" title="Creatividad">🟢</button>
                     <button class="btn-hat blue" data-hat="blue" title="Proceso">🔵</button>
-                    <button class="btn-auto" id="btn-auto-hat">🤖 Auto-Facilitador</button>
+                    <button class="btn-auto" id="btn-auto-hat">🤖 Automático</button>
                 </div>
             </header>
 
             <div class="content-split">
                 <!-- Chat Area -->
                 <div class="chat-column">
-                    <section class="chat-area" id="chat-stream" tabindex="0">
+                    <section class="chat-area" id="chat-stream">
                         <div class="message system-message">
                             <div class="avatar">🤖</div>
                             <div class="bubble">
@@ -128,6 +135,66 @@
     <!-- External Libs -->
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <div id="welcome-overlay" class="welcome-overlay">
+    <div class="welcome-content glass-panel">
+        <div class="welcome-header">
+            <h1>🧠 6-Hat <span class="highlight">Brainstorm</span></h1>
+            <p>Tu equipo de IA privado y local. 100% Confidencial.</p>
+        </div>
+        
+        <p class="instruction-text">
+            Este sistema utiliza 6 agentes inteligentes para analizar tus reuniones desde diferentes perspectivas.
+            <br>Pasa el cursor sobre cada sombrero para conocer a tu equipo:
+        </p>
+
+        <div class="hats-showcase">
+            <div class="hat-card white">
+                <div class="icon">⚪</div>
+                <h3>Analista</h3>
+                <p>Busca hechos objetivos y datos en tus PDFs (RAG).</p>
+            </div>
+
+            <div class="hat-card red">
+                <div class="icon">🔴</div>
+                <h3>Emocional</h3>
+                <p>Reacciona con intuición y sentimientos sin lógica.</p>
+            </div>
+
+            <div class="hat-card black">
+                <div class="icon">⚫</div>
+                <h3>Crítico</h3>
+                <p>Detecta riesgos, peligros y problemas fatales.</p>
+            </div>
+
+            <div class="hat-card yellow">
+                <div class="icon">🟡</div>
+                <h3>Optimista</h3>
+                <p>Encuentra beneficios y valor en cualquier idea.</p>
+            </div>
+
+            <div class="hat-card green">
+                <div class="icon">🟢</div>
+                <h3>Creativo</h3>
+                <p>Propone alternativas, innovaciones y cambios.</p>
+            </div>
+
+            <div class="hat-card blue">
+                <div class="icon">🔵</div>
+                <h3>Director</h3>
+                <p>Organiza, resume y controla el flujo de la reunión.</p>
+            </div>
+        </div>
+
+        <button id="btn-start-app" class="btn-start">
+            Iniciar Sesión Segura 🚀
+        </button>
+    </div>
+    <div id="image-modal" class="image-modal hidden">
+        <span class="close-modal">&times;</span>
+        <img class="modal-content" id="modal-img">
+        <div id="modal-caption"></div>
+    </div>
+</div>
 </body>
 
 </html>
