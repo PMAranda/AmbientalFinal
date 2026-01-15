@@ -11,10 +11,71 @@ const rag = new RAGModule(worker);
 const agents = new AgentModule(worker, rag);
 const canvas = new CanvasModule('drawing-board', worker);
 
-// UI
+// UI Globales
 const btnMic = document.getElementById('btn-mic');
 const btnSend = document.getElementById('btn-send');
 const userInput = document.getElementById('user-input');
+
+// ESTADO DE CIERRE DE SESIÓN
+let isEndingSession = false;
+
+// --- NUEVO: BOTÓN DE FINALIZAR SESIÓN ---
+const btnEndSession = document.getElementById('btn-end-session');
+const summaryOverlay = document.getElementById('summary-overlay');
+const summaryContent = document.getElementById('summary-content');
+const btnRestart = document.getElementById('btn-restart-app');
+
+if (btnEndSession) {
+    btnEndSession.addEventListener('click', () => {
+        const confirmEnd = confirm("¿Seguro que quieres finalizar la sesión y generar el acta?");
+        if (confirmEnd) {
+            isEndingSession = true; // ACTIVAMOS BANDERA
+            
+            // Mostramos el overlay cargando
+            summaryOverlay.classList.remove('hidden');
+            summaryContent.innerHTML = '<div style="text-align:center;">🧠 <b>Generando acta de la reunión...</b><br>Analizando historial y dibujos...</div>';
+            
+            // Forzamos al agente azul a resumir
+            agents.triggerHat('blue', 'haz un resumen detallado y concluye la reunión');
+        }
+    });
+}
+
+// LÓGICA DE REINICIO (BOTÓN EN EL OVERLAY)
+if (btnRestart) {
+    btnRestart.addEventListener('click', () => {
+        // 1. Ocultar overlay de resumen
+        summaryOverlay.classList.add('hidden');
+
+        // 2. Limpiar Chat
+        const chatContainer = document.getElementById('chat-stream');
+        chatContainer.innerHTML = `
+            <div class="message system-message">
+                <div class="avatar">🤖</div>
+                <div class="bubble">
+                    Sesión Reiniciada.
+                    <br><small>Sube un PDF o empieza a hablar para comenzar.</small>
+                </div>
+            </div>`;
+        
+        // 3. Limpiar Galería y Pizarra
+        document.getElementById('gallery-grid').innerHTML = '<div class="empty-gallery-text">Aún no hay análisis</div>';
+        document.getElementById('gallery-count').innerText = '0';
+        // Limpiamos canvas si es posible (accediendo a fabric desde module o recargando)
+        // (Para simplificar, recargamos la página sería lo más limpio, pero aquí lo hacemos SPA)
+        
+        // 4. Resetear Agentes (Memoria)
+        agents.reset();
+
+        // 5. Mostrar Overlay de Bienvenida
+        const welcomeOverlay = document.getElementById('welcome-overlay');
+        welcomeOverlay.style.display = 'flex'; // Asegurar display flex
+        welcomeOverlay.classList.remove('hidden');
+
+        isEndingSession = false;
+    });
+}
+
 
 // Controles Micrófono
 if (btnMic) {
@@ -136,6 +197,17 @@ RESPUESTA:`;
 
     // E. Generación de Texto
     if (type === 'generation_result') {
+        
+        // LÓGICA ESPECIAL PARA CIERRE DE SESIÓN
+        if (isEndingSession) {
+            // Reemplazar saltos de línea por <br> y negritas para HTML
+            const formattedText = text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+            
+            summaryContent.innerHTML = formattedText;
+            return; // Detenemos aquí para que NO salga en el chat de fondo
+        }
+
+        // Comportamiento normal (Chat)
         addMessageToChat('bot', text, hat);
         agents.addToHistory('AI', text);
     }
@@ -184,19 +256,13 @@ function addMessageToChat(role, text, hat = null) {
     
     chatContainer.appendChild(msgDiv);
     
-    // --- FUNCIÓN DE SCROLL ROBUSTA ---
+    // Scroll
     const scrollToBottom = () => {
-        // Opción A: Directo y sin fallos (scrollTop es más fiable que scrollTo en algunos navegadores)
         chatContainer.scrollTop = chatContainer.scrollHeight;
     };
-
-    // 1. Intentar scroll inmediato
     scrollToBottom();
-
-    // 2. Intentar de nuevo tras un instante (para asegurar que el navegador pintó el nuevo div)
     requestAnimationFrame(() => {
         scrollToBottom();
-        // Un último intento de seguridad por si había imágenes cargando
         setTimeout(scrollToBottom, 100);
     });
 }
@@ -208,37 +274,27 @@ const modal = document.getElementById('image-modal');
 const modalImg = document.getElementById('modal-img');
 const closeModal = document.querySelector('.close-modal');
 let savedImages = 0;
-// Escuchar evento de nuevo análisis (viene de canvas.js)
+
 document.addEventListener('debug-image', (e) => {
     const imageUrl = e.detail;
-    
-    // 1. Mostrar en el chat (como antes)
     addMessageToChat('system', `<img src="${imageUrl}" style="max-height:100px; border-radius:8px; border:1px solid #444;">`, 'info');
-
-    // 2. Añadir a la Galería Sidebar
     addCheckToGallery(imageUrl);
 });
 
 function addCheckToGallery(url) {
-    // Quitar mensaje de "vacío" si es la primera
     const emptyText = document.querySelector('.empty-gallery-text');
     if (emptyText) emptyText.remove();
 
-    // Crear elemento
     const div = document.createElement('div');
     div.className = 'gallery-item glass-panel-inset';
     div.innerHTML = `<img src="${url}" alt="Análisis ${savedImages + 1}">`;
     
-    // Evento para abrir modal
     div.addEventListener('click', () => {
         modal.classList.remove('hidden');
         modalImg.src = url;
     });
 
-    // Añadir al principio (lo más nuevo arriba)
     galleryGrid.prepend(div);
-
-    // Actualizar contador
     savedImages++;
     if (galleryCount) galleryCount.innerText = savedImages;
 }
@@ -250,13 +306,13 @@ if (closeModal) {
     });
 }
 
-// Cerrar al hacer clic fuera de la imagen
 window.addEventListener('click', (e) => {
     if (e.target === modal) {
         modal.classList.add('hidden');
     }
 });
-// Iniciar carga
+
+// Carga Inicial
 worker.postMessage({ type: 'load' });
 
 // --- LÓGICA DE BIENVENIDA ---
@@ -265,13 +321,7 @@ const overlay = document.getElementById('welcome-overlay');
 
 if (btnStart && overlay) {
     btnStart.addEventListener('click', () => {
-        // Efecto de desvanecimiento
         overlay.classList.add('hidden');
-        
-        // Opcional: Reproducir un sonido sutil de inicio
-        // o iniciar el contexto de audio si es necesario por políticas del navegador
-        
-        // Eliminamos del DOM después de la animación para que no moleste
         setTimeout(() => {
             overlay.style.display = 'none';
         }, 500);

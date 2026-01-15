@@ -12,7 +12,6 @@
 
 <body>
     <div class="app-container">
-        <!-- Sidebar: Documents & RAG -->
         <aside class="sidebar glass-panel">
             <div class="brand">
                 <div class="logo-icon">🧠</div>
@@ -31,8 +30,7 @@
             </div>
 
             <div class="document-list" id="document-list">
-                <!-- Document items will go here -->
-            </div>
+                </div>
             <div class="section-header" style="margin-top: 20px;">
                 <h2>Galería de Pizarra</h2>
                 <span class="badge" id="gallery-count">0</span>
@@ -62,7 +60,6 @@
             </div>
         </aside>
 
-        <!-- Main Content: Chat & Transcription -->
         <main class="main-content">
             <header class="top-bar glass-panel">
                 <div class="meeting-controls">
@@ -89,10 +86,10 @@
                     <button class="btn-hat blue" data-hat="blue" title="Proceso">🔵</button>
                     <button class="btn-auto" id="btn-auto-hat">🤖 Automático</button>
                 </div>
+                <button id="btn-end-session" class="btn-end">🏁 Finalizar</button>
             </header>
 
             <div class="content-split">
-                <!-- Chat Area -->
                 <div class="chat-column">
                     <section class="chat-area" id="chat-stream">
                         <div class="message system-message">
@@ -111,10 +108,8 @@
                     </div>
                 </div>
 
-                <!-- Canvas Toggle Button (Visible on mobile or when closed) -->
                 <button class="toggle-canvas" id="toggle-canvas">🎨</button>
 
-                <!-- Canvas Area -->
                 <section class="canvas-area glass-panel" id="canvas-panel">
                     <div class="canvas-toolbar">
                         <div class="tools">
@@ -132,69 +127,87 @@
         </main>
     </div>
 
-    <!-- External Libs -->
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+
     <div id="welcome-overlay" class="welcome-overlay">
-    <div class="welcome-content glass-panel">
-        <div class="welcome-header">
-            <h1>🧠 6-Hat <span class="highlight">Brainstorm</span></h1>
-            <p>Tu equipo de IA privado y local. 100% Confidencial.</p>
+        <div class="welcome-content glass-panel">
+            <div class="welcome-header">
+                <h1>🧠 6-Hat <span class="highlight">Brainstorm</span></h1>
+                <p>Tu equipo de IA privado y local. 100% Confidencial.</p>
+            </div>
+            
+            <p class="instruction-text">
+                Este sistema utiliza 6 agentes inteligentes para analizar tus reuniones desde diferentes perspectivas.
+                <br>Pasa el cursor sobre cada sombrero para conocer a tu equipo:
+            </p>
+    
+            <div class="hats-showcase">
+                <div class="hat-card white">
+                    <div class="icon">⚪</div>
+                    <h3>Analista</h3>
+                    <p>Busca hechos objetivos y datos en tus PDFs (RAG).</p>
+                </div>
+    
+                <div class="hat-card red">
+                    <div class="icon">🔴</div>
+                    <h3>Emocional</h3>
+                    <p>Reacciona con intuición y sentimientos sin lógica.</p>
+                </div>
+    
+                <div class="hat-card black">
+                    <div class="icon">⚫</div>
+                    <h3>Crítico</h3>
+                    <p>Detecta riesgos, peligros y problemas fatales.</p>
+                </div>
+    
+                <div class="hat-card yellow">
+                    <div class="icon">🟡</div>
+                    <h3>Optimista</h3>
+                    <p>Encuentra beneficios y valor en cualquier idea.</p>
+                </div>
+    
+                <div class="hat-card green">
+                    <div class="icon">🟢</div>
+                    <h3>Creativo</h3>
+                    <p>Propone alternativas, innovaciones y cambios.</p>
+                </div>
+    
+                <div class="hat-card blue">
+                    <div class="icon">🔵</div>
+                    <h3>Director</h3>
+                    <p>Organiza, resume y controla el flujo de la reunión.</p>
+                </div>
+            </div>
+    
+            <button id="btn-start-app" class="btn-start">
+                Iniciar Sesión Segura 🚀
+            </button>
         </div>
-        
-        <p class="instruction-text">
-            Este sistema utiliza 6 agentes inteligentes para analizar tus reuniones desde diferentes perspectivas.
-            <br>Pasa el cursor sobre cada sombrero para conocer a tu equipo:
-        </p>
-
-        <div class="hats-showcase">
-            <div class="hat-card white">
-                <div class="icon">⚪</div>
-                <h3>Analista</h3>
-                <p>Busca hechos objetivos y datos en tus PDFs (RAG).</p>
-            </div>
-
-            <div class="hat-card red">
-                <div class="icon">🔴</div>
-                <h3>Emocional</h3>
-                <p>Reacciona con intuición y sentimientos sin lógica.</p>
-            </div>
-
-            <div class="hat-card black">
-                <div class="icon">⚫</div>
-                <h3>Crítico</h3>
-                <p>Detecta riesgos, peligros y problemas fatales.</p>
-            </div>
-
-            <div class="hat-card yellow">
-                <div class="icon">🟡</div>
-                <h3>Optimista</h3>
-                <p>Encuentra beneficios y valor en cualquier idea.</p>
-            </div>
-
-            <div class="hat-card green">
-                <div class="icon">🟢</div>
-                <h3>Creativo</h3>
-                <p>Propone alternativas, innovaciones y cambios.</p>
-            </div>
-
-            <div class="hat-card blue">
-                <div class="icon">🔵</div>
-                <h3>Director</h3>
-                <p>Organiza, resume y controla el flujo de la reunión.</p>
-            </div>
-        </div>
-
-        <button id="btn-start-app" class="btn-start">
-            Iniciar Sesión Segura 🚀
-        </button>
     </div>
+
     <div id="image-modal" class="image-modal hidden">
         <span class="close-modal">&times;</span>
         <img class="modal-content" id="modal-img">
         <div id="modal-caption"></div>
     </div>
-</div>
-</body>
 
+    <div id="summary-overlay" class="welcome-overlay hidden" style="z-index: 11000;">
+        <div class="welcome-content glass-panel" style="max-width: 600px;">
+            <div class="welcome-header">
+                <h1>📝 Acta de <span class="highlight">Reunión</span></h1>
+                <p>Resumen generado por el Sombrero Azul</p>
+            </div>
+            
+            <div id="summary-content" class="glass-panel-inset" style="text-align: left; padding: 20px; max-height: 50vh; overflow-y: auto; margin-bottom: 20px; font-size: 0.95rem; line-height: 1.6;">
+                Generando resumen...
+            </div>
+    
+            <button id="btn-restart-app" class="btn-start" style="background: var(--hat-red);">
+                Cerrar y Reiniciar 🔄
+            </button>
+        </div>
+    </div>
+
+</body>
 </html>

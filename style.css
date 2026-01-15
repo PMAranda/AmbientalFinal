@@ -813,3 +813,35 @@ body {
 .close-modal:hover {
     color: var(--primary);
 }
+
+/* ... (MANTENER TODO EL CSS ANTERIOR IGUAL) ... */
+
+/* Añadir al final del archivo CSS: */
+
+/* Botón Finalizar */
+.btn-end {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid var(--hat-red);
+    color: var(--hat-red);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-left: 15px;
+    transition: all 0.2s;
+}
+
+.btn-end:hover {
+    background: var(--hat-red);
+    color: white;
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+}
+
+/* Ajuste para listas dentro del resumen */
+#summary-content ul, #summary-content ol {
+    margin-left: 20px;
+    margin-bottom: 10px;
+}
+#summary-content b {
+    color: var(--primary);
+}

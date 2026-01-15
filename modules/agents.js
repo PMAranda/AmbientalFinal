@@ -23,7 +23,20 @@ export class AgentModule {
 
         this.setupListeners();
     }
-
+    reset() {
+        this.conversationHistory = [];
+        this.fullHistory = [];
+        this.isAutoMode = true;
+        this.activeHat = null;
+        
+        // Reset UI de botones
+        document.querySelectorAll('.btn-hat').forEach(b => b.classList.remove('active'));
+        const autoBtn = document.getElementById('btn-auto-hat');
+        if(autoBtn) autoBtn.classList.add('active');
+        
+        console.log("Memoria del agente reiniciada.");
+    }
+    // -----
     setupListeners() {
         const autoBtn = document.getElementById('btn-auto-hat');
         const hatButtons = document.querySelectorAll('.btn-hat');
@@ -91,8 +104,8 @@ export class AgentModule {
             'resumen', 'síntesis', 'conclusión', 'acta'
         ];
         const isSummaryRequest = summaryKeywords.some(kw => content.includes(kw));
-        
-        if (hat === 'Blue' && isSummaryRequest) {
+        console.log(hat)
+        if (isSummaryRequest) {
             console.log("Detectada petición de resumen completo.");
 
             // A. Obtener conteo de dibujos del DOM
