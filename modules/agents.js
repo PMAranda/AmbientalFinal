@@ -84,15 +84,15 @@ export class AgentModule {
             const lastMsg = this.conversationHistory[this.conversationHistory.length - 1] || "el tema";
             content = lastMsg.includes(':') ? lastMsg.split(':')[1] : lastMsg;
         }
-
+        console.log(content)
         // --- NUEVA LÓGICA: DETECCIÓN DE RESUMEN (SOMBRERO AZUL) ---
         const summaryKeywords = [
             'resumir', 'recapitular', 'recapitulemos', 'resumamos', 'concluir', 
             'resumen', 'síntesis', 'conclusión', 'acta'
         ];
-        const isSummaryRequest = summaryKeywords.some(kw => content.toLowerCase().includes(kw));
-
-        if (hat === 'blue' && isSummaryRequest) {
+        const isSummaryRequest = summaryKeywords.some(kw => content.includes(kw));
+        
+        if (hat === 'Blue' && isSummaryRequest) {
             console.log("Detectada petición de resumen completo.");
 
             // A. Obtener conteo de dibujos del DOM
