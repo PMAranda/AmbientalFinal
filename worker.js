@@ -131,17 +131,19 @@ self.onmessage = async (e) => {
         }
     }
 
-    // --- GENERACIÓN ---
+    // --- GENERACIÓN (LLM) ---
     if (type === 'generate') {
         if (!text_model || !text_tokenizer) return;
 
-        // CAMBIO CLAVE: Si enviamos un 'system_prompt', lo usamos. Si no, usamos el genérico.
         const systemInstruction = data.system_prompt || "Eres un asistente útil y breve en español.";
-        
-        // Construimos el chat correctamente separando Roles
+        const userContent = data.text || data.prompt;
+
+        // Comprobar si es un resumen (si tiene drawing_count definido)
+        const isSummary = data.drawing_count !== undefined;
+
         const messages = [
             { role: "system", content: systemInstruction },
-            { role: "user", content: data.text || data.prompt } // data.text es el input del usuario limpio
+            { role: "user", content: userContent }
         ];
 
         try {
@@ -150,11 +152,14 @@ self.onmessage = async (e) => {
                 return_dict: true 
             });
 
+            // Si es resumen, damos más tokens (512), si no, normal (256)
+            const maxTokens = isSummary ? 512 : 256;
+
             const outputs = await text_model.generate({
                 ...inputs,
-                max_new_tokens: 256,
+                max_new_tokens: maxTokens,
                 do_sample: true, // Pon true para más variedad creativa
-                temperature: 0.1, // Un poco más alto para creatividad, 0.1 es muy robótico
+                temperature: 0.2, // Baja temperatura para resúmenes más fieles
                 top_p: 0.9,
             });
 
@@ -165,8 +170,15 @@ self.onmessage = async (e) => {
             if (response.includes("assistant")) {
                 response = response.split("assistant").pop();
             }
+            response = response.trim();
+
+            // --- AÑADIDO: PIE DE PÁGINA CON DIBUJOS ---
+            if (isSummary) {
+                response += `\n\n📌 <b>Nota del sistema:</b> Además, se guardaron un total de <b>${data.drawing_count}</b> dibujos, que se pueden consultar en la galería.`;
+            }
+            // ------------------------------------------
             
-            self.postMessage({ type: 'generation_result', text: response.trim(), hat: data.hat });
+            self.postMessage({ type: 'generation_result', text: response, hat: data.hat });
 
         } catch (e) {
             console.error(e);
@@ -188,7 +200,6 @@ self.onmessage = async (e) => {
         ];
 
         // 2. MAPEO: Etiqueta Inglés -> Identificador del Sombrero
-        // Esto conecta lo que detecta la IA con lo que necesita tu interfaz
         const hatMap = {
             "objective facts and data": "White", 
             "emotional reaction": "Red",         
@@ -198,8 +209,7 @@ self.onmessage = async (e) => {
             "process control and summary": "Blue"
         };
 
-        // 3. EJECUCIÓN (Con hypothesis_template para mejorar el contexto)
-        // "multi_label: false" fuerza a elegir solo un sombrero ganador.
+        // 3. EJECUCIÓN
         const output = await classifier_pipeline(data.text, labels, { 
             multi_label: false,
             hypothesis_template: "The intent of this sentence is {}." 
@@ -209,9 +219,6 @@ self.onmessage = async (e) => {
         const topLabel = output.labels[0]; // La etiqueta ganadora
         const topScore = output.scores[0]; // La confianza (0 a 1)
         const detectedHat = hatMap[topLabel]; // Traducimos a "White", "Red", etc.
-
-        // (Opcional) Filtro de confianza: Si es menor a 0.30, quizás es ruido.
-        // if (topScore < 0.30) { ... manejar caso incierto ... }
 
         // Enviamos el resultado al hilo principal
         self.postMessage({ 
@@ -241,7 +248,7 @@ self.onmessage = async (e) => {
     }
 
     // --- VISIÓN ---
-if (type === 'vision') {
+    if (type === 'vision') {
         if (!vlm_model) return;
         try {
             const image = await RawImage.read(data.image);

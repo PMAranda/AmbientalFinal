@@ -2,22 +2,24 @@ export class AgentModule {
     constructor(worker, ragModule) {
         this.worker = worker;
         this.rag = ragModule;
-        this.conversationHistory = [];
+        
+        // MEMORIA
+        this.conversationHistory = []; // Memoria a corto plazo (Contexto inmediato)
+        this.fullHistory = [];         // NUEVO: Memoria completa para el resumen final
         
         // ESTADO
         this.isAutoMode = true; // Empieza en automático
         this.activeHat = null;  // Ningún sombrero fijo al inicio
 
-        // PROMPTS (Se mantienen igual que antes...)
+        // PROMPTS (Referencia)
         this.hatPrompts = {
-            white: "Eres un asistente analista objetivo. Tu objetivo es localizar hechos concretos, cifras y datos. No des opiniones.",
-            red: "Eres un asistente de gestion emocional. Tu rol es calmar el ánimo del equipo. Si notas emociones negativas, calma el ambiente.",
-            black: "Eres una analista crítico y racional. Identifica riesgos y peligros de forma pesimista.",
-            yellow: "Eres un asistente optimista. Identifica beneficios y valor añadido. Explica por qué funcionará.",
-            green: "Eres un asistente creativo. Ignora limitaciones. Valora ideas nuevas y propon alternativas innovadoras y soluciones nuevas.",
-            blue: "Eres un asistente moderador. Sintetiza la discusión, por orden y define pasos.",
+            white: "Eres un analista objetivo. Tu única función es aportar datos numéricos y hechos probados que ya conozcas o estén en el contexto.",
+            red: "Eres un mediador emocional y empático. Si detectas agresividad o conflicto en el texto del usuario, tu objetivo es pedir calma y sugerir mantener un tono respetuoso. Si el usuario expresa sentimientos, valídalos.",
+            black: "Eres un analista de riesgos prudente y pesimista. Tu objetivo es señalar los peligros, problemas legales o pérdidas económicas potenciales basados en lo que dice el usuario.",
+            yellow: "Eres un consultor optimista. Destaca los beneficios, el valor y las oportunidades de éxito.",
+            green: "Eres un creativo sin límites. Propón una alternativa innovadora, loca o diferente a lo que se ha dicho.",
+            blue: "Eres el moderador de la reunión. Resume lo dicho hasta ahora y propón el siguiente paso."
         };
-
 
         this.setupListeners();
     }
@@ -64,36 +66,77 @@ export class AgentModule {
     }
 
     addToHistory(role, text) {
-        this.conversationHistory.push(`${role}: ${text}`);
+        const entry = `${role}: ${text}`;
+        
+        // 1. Memoria Corta (para chat fluido)
+        this.conversationHistory.push(entry);
         if (this.conversationHistory.length > 5) this.conversationHistory.shift();
+
+        // 2. NUEVO: Memoria Completa (para el resumen)
+        this.fullHistory.push(entry);
     }
 
     // Método para llamar al worker
-    triggerHat(hat, textOverride = null) {
-        // Obtenemos el texto: o es nuevo (textOverride) o es el último del historial
+   triggerHat(hat, textOverride = null) {
+        // 1. Obtener el texto del usuario
         let content = textOverride;
         if (!content) {
             const lastMsg = this.conversationHistory[this.conversationHistory.length - 1] || "el tema";
             content = lastMsg.includes(':') ? lastMsg.split(':')[1] : lastMsg;
         }
 
-        const instruction = this.hatPrompts[hat];
-        const fullPrompt = `
-### INSTRUCCIÓN DEL ROL:
-${instruction}
+        // --- NUEVA LÓGICA: DETECCIÓN DE RESUMEN (SOMBRERO AZUL) ---
+        const summaryKeywords = [
+            'resumir', 'recapitular', 'recapitulemos', 'resumamos', 'concluir', 
+            'resumen', 'síntesis', 'conclusión', 'acta'
+        ];
+        const isSummaryRequest = summaryKeywords.some(kw => content.toLowerCase().includes(kw));
 
-### TEXTO DE ENTRADA:
-"${content}"
+        if (hat === 'blue' && isSummaryRequest) {
+            console.log("Detectada petición de resumen completo.");
 
-### REQUISITOS:
-- Responde EXCLUSIVAMENTE en español.
-- Sé breve y directo.
+            // A. Obtener conteo de dibujos del DOM
+            const galleryElement = document.getElementById('gallery-count');
+            const drawingCount = galleryElement ? galleryElement.innerText : "0";
 
-### TU RESPUESTA:`;
+            // B. Preparar historial completo (Convertir array a texto)
+            // Usamos slice(-4000) caracteres para asegurar que entra en el prompt si es muy largo
+            const fullContext = this.fullHistory.join('\n').slice(-4000); 
 
+            // C. Enviar al worker con parámetro especial 'drawing_count'
+            this.worker.postMessage({
+                type: 'generate',
+                data: { 
+                    system_prompt: "Eres un secretario experto. Tu tarea es generar un RESUMEN ESTRUCTURADO Y COMPLETO de toda la conversación. Ignora saludos, céntrate en las decisiones, ideas clave y puntos de acción.", 
+                    text: `Historial de la reunión:\n${fullContext}\n\nInstrucción: Genera el resumen detallado ahora.`,
+                    hat: 'blue',
+                    drawing_count: drawingCount // <--- DATO CLAVE
+                }
+            });
+            return; // Salimos para que no se ejecute el código normal de abajo
+        }
+        // -----------------------------------------------------------
+        console.log("Ni resumen ni ostias.");
+        // 2. Definir la personalidad (System Prompt) estándar
+        const prompts = {
+            white: "Eres un analista de datos objetivo. Tu trabajo es responder unicamente con hechos o pedir datos concretos. No des opiniones.",
+            red: "Eres un mediador de conflictos y emociones. Tienes dos funciones: 1) Si el usuario es agresivo o insulta, pide calma y respeto inmediatamente. 2) Si el usuario expresa sentimientos, sé empático. Sé muy breve.",
+            black: "Eres un gestor de riesgos corporativos. Tu trabajo es analizar la frase del usuario y explicar POR QUÉ es una mala idea o qué peligros financieros/técnicos conlleva. Sé pesimista y crítico.",
+            yellow: "Eres un consultor optimista. Tu trabajo es encontrar beneficios y valor de negocio en lo que dice el usuario. Sé entusiasta.",
+            green: "Eres un experto en innovación lateral. Propón una alternativa radical o una idea loca relacionada con lo que dice el usuario. No juzgues, solo innova.",
+            blue: "Eres el moderador de la reunión. Tu trabajo es poner orden. Resume brevemente lo que se ha dicho o propón pasar al siguiente punto."
+        };
+
+        const systemInstruction = prompts[hat] || prompts['blue'];
+
+        // 3. Enviamos al worker
         this.worker.postMessage({
             type: 'generate',
-            data: { prompt: fullPrompt, hat: hat }
+            data: { 
+                system_prompt: systemInstruction, 
+                text: content,                    
+                hat: hat 
+            }
         });
     }
 }
