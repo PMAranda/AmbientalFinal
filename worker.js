@@ -137,7 +137,8 @@ self.onmessage = async (e) => {
 
         const systemInstruction = data.system_prompt || "Eres un asistente útil y breve en español.";
         const userContent = data.text || data.prompt;
-
+        console.log(systemInstruction)
+        console.log(userContent)
         // Comprobar si es un resumen (si tiene drawing_count definido)
         const isSummary = data.drawing_count !== undefined;
 
@@ -151,7 +152,7 @@ self.onmessage = async (e) => {
                 add_generation_prompt: true,
                 return_dict: true 
             });
-
+            console.log(inputs)
             // Si es resumen, damos más tokens (512), si no, normal (256)
             const maxTokens = isSummary ? 512 : 256;
 
@@ -174,7 +175,7 @@ self.onmessage = async (e) => {
 
             // --- AÑADIDO: PIE DE PÁGINA CON DIBUJOS ---
             if (isSummary) {
-                response += `\n\n📌 <b>Nota del sistema:</b> Además, se guardaron un total de <b>${data.drawing_count}</b> dibujos, que se pueden consultar en la galería.`;
+                response += `\n\n📌 Además, se guardaron un total de <b>${data.drawing_count}</b> dibujos, que se pueden consultar en la galería.`;
             }
             // ------------------------------------------
             

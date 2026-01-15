@@ -845,3 +845,35 @@ body {
 #summary-content b {
     color: var(--primary);
 }
+
+/* --- BOTÓN DE BORRAR MENSAJES --- */
+.delete-msg-btn {
+    opacity: 0; /* Invisible por defecto */
+    transition: opacity 0.2s ease, transform 0.2s;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 5px; /* Un poco de margen superior */
+    flex-shrink: 0; /* Evita que se aplaste */
+}
+
+/* Mostrar botón al pasar el ratón por encima del mensaje */
+.message:hover .delete-msg-btn {
+    opacity: 1;
+}
+
+/* Efecto hover sobre el propio botón */
+.delete-msg-btn:hover {
+    background: var(--hat-red);
+    color: white;
+    border-color: var(--hat-red);
+    transform: scale(1.1);
+}

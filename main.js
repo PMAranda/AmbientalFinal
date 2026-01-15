@@ -119,6 +119,7 @@ const handleUserMessage = (inputText = null) => {
                 type: 'embed', 
                 data: { text: text, id: `QUERY:${text}` } 
             });
+    
         } 
         // Cualquier otro color (o blanco sin docs) responde directo
         else {
@@ -156,18 +157,40 @@ worker.onmessage = (e) => {
     }
 
     // C. Orquestador
-    if (type === 'intent_result') {
+   if (type === 'intent_result') {
         const safeHat = (typeof hat === 'string' && hat) ? hat : null;
         const hatLabel = safeHat ? safeHat.toUpperCase() : 'DESCONOCIDO';
         const confPct = (typeof confidence === 'number') ? (confidence * 100).toFixed(0) : '0';
 
         addMessageToChat('system', `💡 Intención: Sombrero ${hatLabel} (${confPct}%)`, safeHat);
-        if (safeHat) agents.triggerHat(safeHat);
+
+        if (safeHat) {
+            // RECUPERAR EL TEXTO DEL USUARIO DEL HISTORIAL
+            // (Necesario porque el evento intent_result no devuelve el texto original)
+            const lastMsgEntry = agents.conversationHistory[agents.conversationHistory.length - 1] || "";
+            const userText = lastMsgEntry.includes(':') ? lastMsgEntry.split(':')[1].trim() : lastMsgEntry;
+
+            // LÓGICA RAG AUTOMÁTICA
+            // Si es Sombrero Blanco Y tenemos documentos cargados -> BUSCAR EN RAG
+            if (safeHat.toLowerCase() === 'white' && rag.documents.some(d => d.isReady)) {
+                addMessageToChat('system', '⚪ Sombrero Blanco (Auto) buscando en datos...', 'white');
+                worker.postMessage({ 
+                    type: 'embed', 
+                    data: { text: userText, id: `QUERY:${userText}` } 
+                });
+                console.log()
+            } else {
+                // Si es otro color O es blanco pero no hay PDFs -> RESPONDER DIRECTAMENTE
+                agents.triggerHat(safeHat);
+            }
+        }
     }
 
     // D. RAG (Mejorado)
     if (type === 'embedding_result') {
-        // Verificamos que sea una respuesta a una pregunta y no un chunk
+        // Verificamos que sea una respuesta a una
+        //  pregunta y no un chunk
+        console.log("RAG")
         if (id && typeof id === 'string' && id.startsWith('QUERY:')) {
             const originalQuery = id.split('QUERY:')[1];
             const results = rag.search(embedding, 3); // Top 3 resultados
@@ -246,14 +269,44 @@ function addMessageToChat(role, text, hat = null) {
     // Procesar negritas **texto** -> <b>texto</b>
     let content = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
 
+    // Botón de eliminar (HTML)
+    const deleteBtnHtml = `<button class="delete-msg-btn" title="Borrar mensaje">&times;</button>`;
+
     // Construir HTML
     if (isSystem) {
-        msgDiv.innerHTML = `<div class="bubble system-bubble">${content}</div>`;
+        // En mensajes de sistema, ponemos el botón dentro o al lado. 
+        // Para simplificar, lo añadimos al final del flex container.
+        msgDiv.innerHTML = `
+            <div class="bubble system-bubble">${content}</div>
+            ${deleteBtnHtml}
+        `;
     } else {
         const avatar = role === 'user' ? '👤' : '🤖';
-        msgDiv.innerHTML = `<div class="avatar">${avatar}</div><div class="bubble">${content}</div>`;
+        // Estructura: Avatar | Burbuja | Botón
+        // Gracias a flex-direction: row-reverse en .message.user, el orden visual se ajusta solo.
+        msgDiv.innerHTML = `
+            <div class="avatar">${avatar}</div>
+            <div class="bubble">${content}</div>
+            ${deleteBtnHtml}
+        `;
     }
     
+    // --- LÓGICA DE BORRADO ---
+    // Seleccionamos el botón que acabamos de crear dentro de este mensaje
+    const deleteBtn = msgDiv.querySelector('.delete-msg-btn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+            // Efecto visual antes de borrar (opcional, queda elegante)
+            msgDiv.style.opacity = '0';
+            msgDiv.style.transform = 'scale(0.9)';
+            
+            setTimeout(() => {
+                msgDiv.remove(); // Elimina el elemento del DOM
+            }, 200); // Espera 200ms a que termine la transición
+        });
+    }
+    // -------------------------
+
     chatContainer.appendChild(msgDiv);
     
     // Scroll

@@ -140,7 +140,7 @@ export class AgentModule {
             blue: "Eres el moderador de la reunión. Tu trabajo es poner orden. Resume brevemente lo que se ha dicho o propón pasar al siguiente punto."
         };
 
-        const systemInstruction = prompts[hat] || prompts['blue'];
+        const systemInstruction = prompts[hat.toLowerCase()] || prompts['blue'];
 
         // 3. Enviamos al worker
         this.worker.postMessage({
