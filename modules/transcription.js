@@ -41,53 +41,74 @@ export class TranscriptionModule {
             alert("No se pudo acceder al micrófono. Por favor verifica los permisos.");
         }
     }
+    async stop() {
+        // 1. ¡CORTAR INMEDIATAMENTE!
+        // Al poner esto primero, cualquier audio que llegue milisegundos después se ignorará.
+        this.isRecording = false; 
+        this.buffer = []; // Borramos lo que hubiera en memoria para que no se envíe a medio hacer.
+
+        // 2. Desconectar el hardware (Limpieza)
+        if (this.processor) {
+            this.processor.disconnect();
+            this.processor = null;
+        }
+        if (this.mediaStream) {
+            this.mediaStream.getTracks().forEach(track => track.stop()); // Apaga la luz de la webcam/micro
+            this.mediaStream = null;
+        }
+        if (this.audioContext) {
+            // Cerramos el contexto de audio para liberar memoria del navegador
+            await this.audioContext.close();
+            this.audioContext = null;
+        }
+        
+        console.log("🛑 Micrófono detenido completamente.");
+    }
 
     handleAudioData(inputData) {
-        // Simple VAD (Voice Activity Detection) - Amplitude threshold
-        // Or just accumulating a buffer to send to worker every X seconds
-
-        // We accumulate ~1 second of audio (16000 samples) then send
-        // Or send smaller chunks if the model supports streaming well.
-        // For Whisper via Transformers.js, it often wants a chunk.
-
-        // For this demo, let's copy the data and send it.
-        // We'll trust the worker/pipeline to handle the framing or we accumulate here.
-
-        // Let's accumulate ~2 seconds of audio before sending for better context
-        // 16,000 * 2 = 32,000 samples
-
+        if (!this.isRecording) return;
+        // 1. Añadimos el trocito de audio actual al buffer general
         for (let i = 0; i < inputData.length; i++) {
             this.buffer.push(inputData[i]);
         }
 
-        if (this.buffer.length >= 16000 * 3) { // 3 seconds chunks
+        // 2. Calculamos el VOLUMEN del trocito actual
+        // (Sumamos los valores absolutos para ver si hay "ruido" o silencio)
+        let sum = 0;
+        for (let i = 0; i < inputData.length; i++) {
+            sum += Math.abs(inputData[i]);
+        }
+        const volume = sum / inputData.length;
+
+        // 3. Configuración de Tiempos (Sample Rate = 16000)
+        // Mínimo 2 segundos para no enviar palabras sueltas o ruidos
+        const MIN_SAMPLES = 16000 * 2; 
+        // Máximo 7 segundos para que no tardes mucho en ver el texto
+        const MAX_SAMPLES = 16000 * 7;   
+        // Umbral de silencio (Si el volumen baja de aquí, asumimos que has hecho una pausa)
+        // AJUSTA ESTE VALOR SI ES NECESARIO (0.005 a 0.02)
+        const SILENCE_THRESH = 0.01;     
+
+        // 4. Lógica de Decisión
+        const isSilence = volume < SILENCE_THRESH;
+        const hasMinimumData = this.buffer.length >= MIN_SAMPLES;
+        const isTooLong = this.buffer.length >= MAX_SAMPLES;
+
+        // CORTAMOS Y ENVIAMOS SI:
+        // (Llevamos suficiente tiempo grabando Y detectamos un silencio)
+        //  O
+        // (Llevamos demasiado tiempo grabando y hay que cortar ya para no bloquear)
+        if ((hasMinimumData && isSilence) || isTooLong) {
+            
+            // Enviamos al worker
             const audioData = new Float32Array(this.buffer);
             this.worker.postMessage({
                 type: 'audio_chunk',
                 data: audioData
             });
-            this.buffer = []; // clear buffer after sending
-            // Note: Overlapping windows would be better for continuity
+            
+            // Limpiamos el buffer para la siguiente frase
+            this.buffer = []; 
         }
-    }
-
-    async stop() {
-        if (!this.isRecording) return;
-
-        if (this.processor) {
-            this.processor.disconnect();
-            this.processor = null;
-        }
-        if (this.audioContext) {
-            await this.audioContext.close();
-            this.audioContext = null;
-        }
-        if (this.mediaStream) {
-            this.mediaStream.getTracks().forEach(track => track.stop());
-            this.mediaStream = null;
-        }
-
-        this.isRecording = false;
-        this.buffer = [];
     }
 }

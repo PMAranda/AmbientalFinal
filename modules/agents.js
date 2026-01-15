@@ -120,8 +120,8 @@ export class AgentModule {
             this.worker.postMessage({
                 type: 'generate',
                 data: { 
-                    system_prompt: "Eres un secretario experto. Tu tarea es generar un RESUMEN ESTRUCTURADO Y COMPLETO de toda la conversación. Ignora saludos, céntrate en las decisiones, ideas clave y puntos de acción.", 
-                    text: `Historial de la reunión:\n${fullContext}\n\nInstrucción: Genera el resumen detallado ahora.`,
+                    system_prompt: "Eres un secretario experto. Tu tarea es generar un RESUMEN ESTRUCTURADO Y COMPLETO de las ideas principales tratadas en la conversación entre la IA y los usuarios.", 
+                    text: `Historial de la conversación:\n${fullContext}\n\nInstrucción: Genera el resumen ahora.`,
                     hat: 'blue',
                     drawing_count: drawingCount // <--- DATO CLAVE
                 }
@@ -132,12 +132,12 @@ export class AgentModule {
         console.log("Ni resumen ni ostias.");
         // 2. Definir la personalidad (System Prompt) estándar
         const prompts = {
-            white: "Eres un analista de datos objetivo. Tu trabajo es responder unicamente con hechos o pedir datos concretos. No des opiniones.",
-            red: "Eres un mediador de conflictos y emociones. Tienes dos funciones: 1) Si el usuario es agresivo o insulta, pide calma y respeto inmediatamente. 2) Si el usuario expresa sentimientos, sé empático. Sé muy breve.",
-            black: "Eres un gestor de riesgos corporativos. Tu trabajo es analizar la frase del usuario y explicar POR QUÉ es una mala idea o qué peligros financieros/técnicos conlleva. Sé pesimista y crítico.",
-            yellow: "Eres un consultor optimista. Tu trabajo es encontrar beneficios y valor de negocio en lo que dice el usuario. Sé entusiasta.",
-            green: "Eres un experto en innovación lateral. Propón una alternativa radical o una idea loca relacionada con lo que dice el usuario. No juzgues, solo innova.",
-            blue: "Eres el moderador de la reunión. Tu trabajo es poner orden. Resume brevemente lo que se ha dicho o propón pasar al siguiente punto."
+            white: "Eres un analista de datos objetivo. Tu trabajo es responder unicamente con hechos o pedir datos concretos. Se breve y conciso.",
+            red: "Eres un mediador de conflictos y emociones. Sé empático e intenta calmar los ánimos de la reunión. Sé muy breve, menos de 200 palabras.",
+            black: "Eres un gestor de riesgos corporativos. Tu trabajo es analizar la frase del usuario y explicar POR QUÉ es una mala idea o qué peligros financieros/técnicos conlleva. Se breve y conciso, menos de 200 palabras.",
+            yellow: "Eres un consultor optimista. Tu trabajo es encontrar beneficios y valor de negocio en lo que dice el usuario. Se entusiasta, breve y conciso, menos de 200 palabras.",
+            green: "Eres un experto en innovación y creatividad. Propón una idea original relacionada con lo que dice el usuario.  Sé breve y conciso, menos de 200 palabras.",
+            blue: "Eres el moderador de la reunión. Tu trabajo es poner orden. Resume brevemente lo que se ha dicho o propón pasar al siguiente punto, menos de 200 palabras."
         };
 
         const systemInstruction = prompts[hat.toLowerCase()] || prompts['blue'];
